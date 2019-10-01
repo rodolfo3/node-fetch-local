@@ -124,10 +124,55 @@ test('GET data from URL', async () => {
     });
 });
 
+test('GET external request', async () => {
+  const app = express();
+
+  init(app);
+
+  app.get('/test', async (req, res) => {
+    const response = await fetch('https://google.com');
+    const data = await response.text();
+    res.send(data);
+  });
+
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .then(response => {
+      expect(response.text).toEqual(expect.stringContaining('<title>Google</title>'))
+    });
+});
+
+
+test('GET send with cookies', async () => {
+  const app = express();
+
+  const cookieParser = require('cookie-parser');
+
+  init(app);
+
+  app.use(cookieParser());
+
+  app.get('/ok', (req, res) => res.json(req.cookies));
+
+  app.get('/test', async (req, res) => {
+    const response = await fetch('/ok');
+    const data = await response.json();
+    res.json(data);
+  });
+
+  await supertest(app)
+    .get('/test')
+    .set('Cookie', ['value=1'])
+    .expect(200)
+    .then(response => {
+      expect(response.body.value).toEqual("1")
+    });
+});
+
 
 // TODO
-// optional params in URL
-// external request(google)
-// cookies (read) (req -> API)
 // cookies (write) (API -> res)
 // cookies (read & write in sequence)
+// optional params in URL

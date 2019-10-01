@@ -1,3 +1,4 @@
+const nodeFetch = require('node-fetch');
 const urlParser = require('url');
 const { createNamespace } = require('continuation-local-storage');
 
@@ -5,13 +6,6 @@ const session = createNamespace('requests');
 
 
 const getRouteLayer = (pathname, router) => {
-
-  console.log('>>', router.stack.filter(
-    s => (
-      s.route
-    )
-  ));
-
   const [layer] = router.stack.filter(
     s => (
       s.route
@@ -71,8 +65,14 @@ const buildResponse = (resolve) => {
 };
 
 
-const fetch = async (url) => {
+const fetch = async (url, ...params) => {
+  if (url.startsWith('http')) {
+    return nodeFetch(url, ...params);
+  }
+
   const app = session.get('app');
+  const parentReq = session.get('req');
+
   const { pathname, query } = urlParser.parse(url, true);
   const handler = getHandler(pathname, app._router);
 
@@ -80,6 +80,7 @@ const fetch = async (url) => {
     const res = buildResponse(resolve, reject);
     const req = {
       params: extractParamsFromUrl(pathname, app._router),
+      cookies: parentReq.cookies,
       query,
       // TODO
     };
@@ -93,6 +94,7 @@ const init = (app) => {
   app.use((req, res, next) => {
     session.run(() => {
       session.set('app', app);
+      session.set('req', req);
       next();
     })
   });
