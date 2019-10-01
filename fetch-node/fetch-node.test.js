@@ -62,7 +62,6 @@ test('GET json ok=false', async () => {
   app.get('/test', async (req, res) => {
     const response = await fetch('/ok');
     const data = await response.json();
-    console.log({ response });
     res.json({ ok: response.ok, status: response.statusCode, data });
   });
 
@@ -78,9 +77,57 @@ test('GET json ok=false', async () => {
 });
 
 
+test('GET query params', async () => {
+  const app = express();
+
+  init(app);
+
+  app.get('/ok', (req, res) => res.json(req.query));
+
+  app.get('/test', async (req, res) => {
+    const response = await fetch('/ok?page=2&limit=3');
+    const data = await response.json();
+    res.json(data);
+  });
+
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .then(response => {
+      expect(response.body.page).toBe("2");
+      expect(response.body.limit).toBe("3");
+    });
+});
+
+
+test('GET data from URL', async () => {
+  const app = express();
+
+  init(app);
+
+  app.get('/ok/:page/:limit', (req, res) => res.json(req.params));
+
+  app.get('/test', async (req, res) => {
+    const response = await fetch('/ok/2/3');
+    const data = await response.json();
+    res.json(data);
+  });
+
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .then(response => {
+      expect(response.body.page).toBe("2");
+      expect(response.body.limit).toBe("3");
+    });
+});
+
+
 // TODO
+// optional params in URL
 // external request(google)
-// query-string
 // cookies (read) (req -> API)
 // cookies (write) (API -> res)
-//
+// cookies (read & write in sequence)
