@@ -1,6 +1,7 @@
 const nodeFetch = require('node-fetch');
 const urlParser = require('url');
-const { createNamespace } = require('continuation-local-storage');
+// const { createNamespace } = require('continuation-local-storage');
+const { createNamespace } = require('cls-hooked');
 
 const session = createNamespace('requests');
 
@@ -42,18 +43,20 @@ const extractParamsFromUrl = (pathname, router) => {
 };
 
 
-const buildResponse = (resolve) => {
+const buildResponse = (resolve, reject, parentReq, parentRes) => {
 
   const status = (statusCode) => ({
     send: (data) => resolve({
       statusCode,
       ok: statusCode < 400,
       text: () => Promise.resolve(data),
+      json: () => Promise.resolve(JSON.parse(data)),
     }),
     json: (data) => resolve({
       statusCode,
       ok: statusCode < 400,
       json: () => Promise.resolve(data),
+      text: () => Promise.resolve(JSON.sringify(data)),
     }),
   });
 
@@ -61,6 +64,12 @@ const buildResponse = (resolve) => {
     status,
     send: status(200).send,
     json: status(200).json,
+    cookie: (name, value, ...args) => {
+      parentReq.cookies[name] = value;
+      parentRes.cookie(name, value, ...args);
+    },
+
+    _parentRes: parentRes,
   }
 };
 
@@ -70,22 +79,28 @@ const fetch = async (url, ...params) => {
     return nodeFetch(url, ...params);
   }
 
-  const app = session.get('app');
-  const parentReq = session.get('req');
-
-  const { pathname, query } = urlParser.parse(url, true);
-  const handler = getHandler(pathname, app._router);
-
   return new Promise((resolve, reject) => {
-    const res = buildResponse(resolve, reject);
-    const req = {
-      params: extractParamsFromUrl(pathname, app._router),
-      cookies: parentReq.cookies,
-      query,
-      // TODO
-    };
+    try {
+      const parentReq = session.get('req');
+      const parentRes = session.get('res');
+      const app = session.get('app');
 
-    handler(req, res);
+      const { pathname, query } = urlParser.parse(url, true);
+      const handler = getHandler(pathname, app._router);
+
+      const res = buildResponse(resolve, reject, parentReq, parentRes);
+      const req = {
+        _parentReq: parentReq,
+        params: extractParamsFromUrl(pathname, app._router),
+        cookies: parentReq.cookies,
+        query,
+        // TODO
+      };
+
+      handler(req, res);
+    } catch(e) {
+      reject(e);
+    }
   });
 };
 
@@ -93,8 +108,9 @@ const fetch = async (url, ...params) => {
 const init = (app) => {
   app.use((req, res, next) => {
     session.run(() => {
+      session.set('req', req._parentReq || req);
+      session.set('res', res._parentRes || res);
       session.set('app', app);
-      session.set('req', req);
       next();
     })
   });

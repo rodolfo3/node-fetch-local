@@ -172,7 +172,137 @@ test('GET send with cookies', async () => {
 });
 
 
-// TODO
-// cookies (write) (API -> res)
-// cookies (read & write in sequence)
-// optional params in URL
+test('GET with set cookies', async () => {
+  const app = express();
+
+  const cookieParser = require('cookie-parser');
+
+  init(app);
+
+  app.use(cookieParser());
+
+  app.get('/ok', (req, res) => {
+    res.cookie('i', '42', { domain: 'local.com', path: '/' });
+    res.send('ok');
+  });
+
+  app.get('/test', async (req, res) => {
+    const response = await fetch('/ok');
+    const data = await response.text();
+    res.json(data);
+  });
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .expect('set-cookie', 'i=42; Domain=local.com; Path=/');
+});
+
+
+test('multiple GET pass throuth cookies (promises)', async () => {
+  const app = express();
+
+  const cookieParser = require('cookie-parser');
+
+  init(app);
+
+  app.use(cookieParser());
+
+  app.get('/step1', (req, res) => {
+    res.cookie('j', '21', { domain: 'local.com', path: '/' });
+    res.send('ok');
+  });
+
+  app.get('/step2', (req, res) => {
+    res.cookie('j', parseInt(req.cookies.j) * 2, { domain: 'local.com', path: '/' });
+    res.send('ok');
+  });
+
+  app.get('/test', async (req, res) => {
+    return fetch('/step1').then(() => {
+      fetch('/step2').then((response) => {
+        response.text().then(data => res.json(data));
+      });
+    });
+  });
+
+  const bothCookies = [
+    'j=21; Domain=local.com; Path=/',
+    'j=42; Domain=local.com; Path=/'
+  ].join(',');
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .expect('set-cookie', bothCookies);
+});
+
+
+test('multiple GET pass throuth cookies (async/await)', async () => {
+  const app = express();
+
+  const cookieParser = require('cookie-parser');
+
+  init(app);
+
+  app.use(cookieParser());
+
+  app.get('/step1', (req, res) => {
+    res.cookie('i', '21', { domain: 'local.com', path: '/' });
+    res.send('ok');
+  });
+
+  app.get('/step2', (req, res) => {
+    res.cookie('i', parseInt(req.cookies.i) * 2, { domain: 'local.com', path: '/' });
+    res.send('ok');
+  });
+
+  app.get('/test', async (req, res) => {
+    await fetch('/step1');
+    const response = await fetch('/step2');
+
+    res.send(await response.text());
+  });
+
+  const bothCookies = [
+    'i=21; Domain=local.com; Path=/',
+    'i=42; Domain=local.com; Path=/'
+  ].join(',');
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .expect('set-cookie', bothCookies);
+});
+
+
+test('options parameters on route', async () => {
+  const app = express();
+
+  const cookieParser = require('cookie-parser');
+
+  init(app);
+
+  app.use(cookieParser());
+
+  app.get('/ok/:id?', (req, res) => {
+    res.json(req.params.id || 'NOT SET');
+  });
+
+  app.get('/test', async (req, res) => {
+    const notSet = (await (await fetch('/ok')).json())
+    const set = (await (await fetch('/ok/42')).json())
+    res.json({ set, notSet });
+  });
+
+  await supertest(app)
+    .get('/test')
+    .expect(200)
+    .then(response => {
+      expect(response.body.notSet).toBe('NOT SET');
+      expect(response.body.set).toBe('42');
+    });
+});
+
+
+// TODO raise if access undefined prop
