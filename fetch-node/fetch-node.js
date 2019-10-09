@@ -74,9 +74,73 @@ const buildResponse = (resolve, reject, parentReq, parentRes) => {
 };
 
 
+let CACHE = {};
+let ALLOWED_CACHE_REGEX = [];
+
+
+const cacheCleanup = () => {
+  const now = Date.now();
+  Object.keys(CACHE).forEach((k) => {
+    const cached = CACHE[k];
+    if (cached.validUntil < now) {
+      delete CACHE[k];
+    }
+  });
+};
+
+
+const getFromCache = (url) => {
+  const cached = CACHE[url];
+  if (cached && cached.validUntil > Date.now()) {
+    return cached.data.clone();
+  }
+  setTimeout(cacheCleanup, 0);
+  return null;
+};
+
+
+const setCache = (url, ttl, response) => {
+  CACHE[url] = {
+    data: response.clone(),
+    validUntil: Date.now() + ttl,
+  };
+};
+
+
+const isAllowedToCache = (url, params) => {
+  const [{ method } = {}] = params;
+
+  if (method && method !== 'GET') {
+    return 0;
+  }
+
+  for (const i in ALLOWED_CACHE_REGEX) {
+    const [re, ttl] = ALLOWED_CACHE_REGEX[i];
+    if (re.test(url)) return ttl;
+  }
+
+  return 0;
+};
+
+
+const fetchAndCache = (url, ...params) => {
+  const ttl = isAllowedToCache(url, params)
+  if (ttl > 0) {
+    const cached = getFromCache(url);
+    if (cached) return cached;
+
+    return nodeFetch(url, ...params).then(response => {
+      setCache(url, ttl, response);
+      return response;
+    });
+  }
+  return nodeFetch(url, ...params);
+};
+
+
 const fetch = async (url, ...params) => {
   if (url.startsWith('http')) {
-    return nodeFetch(url, ...params);
+    return fetchAndCache(url, ...params);
   }
 
   return new Promise((resolve, reject) => {
@@ -105,7 +169,10 @@ const fetch = async (url, ...params) => {
 };
 
 
-const init = (app) => {
+const init = (app, { cache } = {}) => {
+  CACHE = {};
+  ALLOWED_CACHE_REGEX = cache || [];
+
   app.use((req, res, next) => {
     session.run(() => {
       session.set('req', req._parentReq || req);

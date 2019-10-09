@@ -1,8 +1,9 @@
 const express = require('express');
 const supertest = require('supertest');
+const nock = require('nock');
 
 
-const { fetch, init } = require('./fetch-node');
+const { fetch, init, flushCache } = require('./fetch-node');
 
 
 test('GET text request', async () => {
@@ -304,5 +305,84 @@ test('options parameters on route', async () => {
     });
 });
 
+
+describe('cached requests', () => {
+  beforeEach(() => {
+    nock('https://api.github.com')
+      .get('/users/rodolfo3')
+      .reply(200, {ok: 1});
+
+    nock('https://api.github.com')
+      .get('/users/rodolfo3')
+      .reply(200, {ok: 2});
+  });
+
+  test('GET cache requests respects TTL', async () => {
+    const app = express();
+    init(
+      app,
+      {
+        cache: [
+          [
+            new RegExp('^https://api.github.com/'), 1000 * 1, // 1 second
+          ]
+        ],
+      }
+    )
+
+    app.get('/test', async (req, res) => {
+      const response = await fetch('https://api.github.com/users/rodolfo3');
+      const data = await response.text();
+
+      setTimeout(async () => {
+        const response2 = await fetch('https://api.github.com/users/rodolfo3');
+        const data2 = await response2.text();
+
+        res.send(data2);
+      }, 1500); // 1.5 seconds
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toEqual('{"ok":2}');
+      });
+  });
+
+  test('GET cache requests only once', async () => {
+    const app = express();
+    init(
+      app,
+      {
+        cache: [
+          [
+            new RegExp('^https://api.github.com/'), 1000 * 2, // 2 seconds
+          ]
+        ],
+      }
+    )
+
+    app.get('/test', async (req, res) => {
+      const response1 = await fetch('https://api.github.com/users/rodolfo3');
+      const data1 = await response1.json();
+
+      const response2 = await fetch('https://api.github.com/users/rodolfo3');
+      const data2 = await response2.json();
+
+      res.send([data1, data2]);
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toEqual('[{"ok":1},{"ok":1}]');
+      });
+  });
+});
+
+
+// cache
 
 // TODO raise if access undefined prop
