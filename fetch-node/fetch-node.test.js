@@ -156,7 +156,7 @@ describe('internal app requests', () => {
 });
 
 
-describe('external requests', async () => {
+describe('external requests', () => {
   test('GET external request', async () => {
     const app = express();
 
@@ -320,6 +320,14 @@ describe('cached requests', () => {
     nock('https://api.github.com')
       .get('/users/rodolfo3')
       .reply(200, {ok: 2});
+
+    nock('https://api.github.com')
+      .post('/users/rodolfo3')
+      .reply(200, {ok: 3});
+
+    nock('https://api.github.com')
+      .post('/users/rodolfo3')
+      .reply(200, {ok: 4});
   });
 
   test('GET cache requests respects TTL', async () => {
@@ -383,6 +391,37 @@ describe('cached requests', () => {
       .expect(200)
       .then(response => {
         expect(response.text).toEqual('[{"ok":1},{"ok":1}]');
+      });
+  });
+
+  test('POST never caches', async () => {
+    const app = express();
+    init(
+      app,
+      {
+        cache: [
+          [
+            new RegExp('^https://api.github.com/'), 1000 * 2, // 2 seconds
+          ]
+        ],
+      }
+    )
+
+    app.get('/test', async (req, res) => {
+      const response1 = await fetch('https://api.github.com/users/rodolfo3', { method: 'POST' });
+      const data1 = await response1.json();
+
+      const response2 = await fetch('https://api.github.com/users/rodolfo3', { method: 'POST' });
+      const data2 = await response2.json();
+
+      res.send([data1, data2]);
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toEqual('[{"ok":3},{"ok":4}]');
       });
   });
 });
