@@ -424,6 +424,56 @@ describe('cached requests', () => {
         expect(response.text).toEqual('[{"ok":3},{"ok":4}]');
       });
   });
+
+  test('GET cache requests only once even if requested in paralell', async () => {
+    nock.cleanAll();
+
+    nock('https://api.github.com')
+      .get('/users/rodolfo3')
+      .reply((uri, requestBody, cb) => {
+        setTimeout(
+          () => cb(null, [200, {ok: 1}]),
+          1000
+        );
+      });
+
+    nock('https://api.github.com')
+      .get('/users/rodolfo3')
+      .reply(200, {ok: 2});
+
+    const app = express();
+    init(
+      app,
+      {
+        cache: [
+          [
+            new RegExp('^https://api.github.com/'), 1000 * 2, // 2 seconds
+          ]
+        ],
+      }
+    )
+
+    app.get('/test', async (req, res) => {
+      const request1 = fetch('https://api.github.com/users/rodolfo3');
+      const request2 = fetch('https://api.github.com/users/rodolfo3');
+
+      const response1 = await request1;
+      const response2 = await request2;
+
+      const data1 = await response1.json();
+      const data2 = await response2.json();
+
+      res.send([data1, data2]);
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toEqual('[{"ok":1},{"ok":1}]');
+      });
+  });
+
 });
 
 
