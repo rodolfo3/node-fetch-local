@@ -479,4 +479,9 @@ describe('cached requests', () => {
 
 // cache
 
+// TODO work with express middlewares (using next() call)
+
+// TODO check `headers` to be an object (not a function)
+
 // TODO raise if access undefined prop
+
