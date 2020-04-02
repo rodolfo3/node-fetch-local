@@ -600,4 +600,4 @@ describe('raise if access undefined property', () => {
 
 // TODO allow read "headers" from response (headers.get("something"))
 //
-// TODO get first endpoint if matches *
+// TODO handler app.use(router);
