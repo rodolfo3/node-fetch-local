@@ -595,3 +595,9 @@ describe('raise if access undefined property', () => {
 });
 
 // TODO check `headers` to be an object (not a function)
+
+// TODO allow res.status(500).end('Internal server error')
+
+// TODO allow read "headers" from response (headers.get("something"))
+//
+// TODO get first endpoint if matches *

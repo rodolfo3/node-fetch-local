@@ -45,20 +45,28 @@ const extractParamsFromUrl = (pathname, router) => {
 
 const buildResponse = (resolve, reject, parentReq, parentRes) => {
 
-  const status = (statusCode) => ({
-    send: (data) => resolve({
+  const status = (statusCode) => {
+    const send = (data) => resolve({
       statusCode,
       ok: statusCode < 400,
       text: () => Promise.resolve(data),
       json: () => Promise.resolve(JSON.parse(data)),
-    }),
-    json: (data) => resolve({
-      statusCode,
-      ok: statusCode < 400,
-      json: () => Promise.resolve(data),
-      text: () => Promise.resolve(JSON.sringify(data)),
-    }),
-  });
+      headers: new nodeFetch.Headers(),
+    });
+    return ({
+      end: send,
+      send,
+      json: (data) => resolve({
+        statusCode,
+        ok: statusCode < 400,
+        json: () => Promise.resolve(data),
+        text: () => Promise.resolve(JSON.sringify(data)),
+        headers: new nodeFetch.Headers({
+          'content-type': 'application/json',
+        }),
+      }),
+    });
+  };
 
   return {
     status,
@@ -107,8 +115,8 @@ const setCache = (url, ttl, response) => {
 };
 
 
-const isAllowedToCache = (url, params) => {
-  const [{ method } = {}] = params;
+const isAllowedToCache = (url, props = {}) => {
+  const { method } = props;
 
   if (method && method !== 'GET') {
     return 0;
@@ -123,18 +131,24 @@ const isAllowedToCache = (url, params) => {
 };
 
 
-const fetchAndCache = (url, ...params) => {
-  const ttl = isAllowedToCache(url, params)
+const fetchAndCache = (url, props) => {
+  const ttl = isAllowedToCache(url, props)
+
+  // if (Object.keys(props.headers).length < 1) {
+  //   props.headers = null;
+  // }
+
   if (ttl > 0) {
     const cached = getFromCache(url);
     if (cached) return cached;
 
-    return nodeFetch(url, ...params).then(response => {
+    return nodeFetch.default(url, props).then(response => {
       setCache(url, ttl, response);
       return response;
     });
   }
-  return nodeFetch(url, ...params);
+
+  return nodeFetch.default(url, props);
 };
 
 
@@ -164,7 +178,7 @@ const buildFetch = ({ app, restrictAttrs }) => {
     if (url.startsWith('http')) {
       return fetchAndCache(url, ...params);
     }
-  
+
     return new Promise((resolve, reject) => {
       try {
         const parentReq = session.get('req');
