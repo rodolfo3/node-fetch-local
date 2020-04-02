@@ -151,7 +151,7 @@ const raiseIfUndefinedPropHandler = (name) => ({
 });
 
 
-const buildFetch = ({ restrictAttrs }) => {
+const buildFetch = ({ app, restrictAttrs }) => {
   const wrapReq = restrictAttrs ? (
     req => new Proxy(req, raiseIfUndefinedPropHandler('req'))
   ) : req => req;
@@ -169,7 +169,6 @@ const buildFetch = ({ restrictAttrs }) => {
       try {
         const parentReq = session.get('req');
         const parentRes = session.get('res');
-        const app = session.get('app');
   
         const { pathname, query } = urlParser.parse(url, true);
         const handler = getHandler(pathname, app._router);
@@ -204,15 +203,14 @@ const init = (app, { cache, restrictAttrs = false } = {}) => {
     session.run(() => {
       session.set('req', req._parentReq || req);
       session.set('res', res._parentRes || res);
-      session.set('app', app);
       next();
     })
   });
 
   if (global.fetch) {
-    throw new Error('fetch already present here!');
+    throw new Error('fetch is already present here!');
   }
-  global.fetch = buildFetch({ restrictAttrs });
+  global.fetch = buildFetch({ app, restrictAttrs });
 };
 
 
