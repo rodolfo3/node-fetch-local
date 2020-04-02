@@ -1,1 +1,1 @@
-global.fetch = require('./fetch-node');
+module.exports = require('./fetch-node');

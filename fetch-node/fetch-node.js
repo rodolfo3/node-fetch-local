@@ -210,7 +210,9 @@ const init = (app, { cache, restrictAttrs = false } = {}) => {
   if (global.fetch) {
     throw new Error('fetch is already present here!');
   }
+
   global.fetch = buildFetch({ app, restrictAttrs });
+  return app;
 };
 
 

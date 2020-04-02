@@ -9,10 +9,12 @@
   },
   "author": "",
   "license": "ISC",
+  "peerDependencies": {
+    "cookie-parser": "^1.4.4",
+    "express": "^4.17.1"
+  },
   "dependencies": {
     "cls-hooked": "^4.2.2",
-    "cookie-parser": "^1.4.4",
-    "express": "^4.17.1",
     "node-fetch": "^2.6.0"
   },
   "devDependencies": {
