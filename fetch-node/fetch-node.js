@@ -138,38 +138,65 @@ const fetchAndCache = (url, ...params) => {
 };
 
 
-const fetch = async (url, ...params) => {
-  if (url.startsWith('http')) {
-    return fetchAndCache(url, ...params);
-  }
+const raiseIfUndefinedPropHandler = (name) => ({
+  get: (obj, prop) => {
+    const value = obj[prop];
 
-  return new Promise((resolve, reject) => {
-    try {
-      const parentReq = session.get('req');
-      const parentRes = session.get('res');
-      const app = session.get('app');
-
-      const { pathname, query } = urlParser.parse(url, true);
-      const handler = getHandler(pathname, app._router);
-
-      const res = buildResponse(resolve, reject, parentReq, parentRes);
-      const req = {
-        _parentReq: parentReq,
-        params: extractParamsFromUrl(pathname, app._router),
-        cookies: parentReq.cookies,
-        query,
-        // TODO
-      };
-
-      handler(req, res);
-    } catch(e) {
-      reject(e);
+    if (typeof value === 'undefined') {
+      throw new Error(`Object ${name} does not have the property "${prop}"`);
     }
-  });
+
+    return value;
+  },
+});
+
+
+const buildFetch = ({ restrictAttrs }) => {
+  const wrapReq = restrictAttrs ? (
+    req => new Proxy(req, raiseIfUndefinedPropHandler('req'))
+  ) : req => req;
+
+  const wrapRes = restrictAttrs ? (
+    res => new Proxy(res, raiseIfUndefinedPropHandler('res'))
+  ) : res => res;
+
+  const fetch = async (url, ...params) => {
+    if (url.startsWith('http')) {
+      return fetchAndCache(url, ...params);
+    }
+  
+    return new Promise((resolve, reject) => {
+      try {
+        const parentReq = session.get('req');
+        const parentRes = session.get('res');
+        const app = session.get('app');
+  
+        const { pathname, query } = urlParser.parse(url, true);
+        const handler = getHandler(pathname, app._router);
+  
+        const res = wrapRes(
+          buildResponse(resolve, reject, parentReq, parentRes),
+        );
+        const req = wrapReq({
+          _parentReq: parentReq,
+          params: extractParamsFromUrl(pathname, app._router),
+          cookies: parentReq.cookies,
+          query,
+          // TODO
+        });
+  
+        handler(req, res);
+      } catch(e) {
+        reject(e);
+      }
+    });
+  };
+
+  return fetch;
 };
 
 
-const init = (app, { cache } = {}) => {
+const init = (app, { cache, restrictAttrs = false } = {}) => {
   CACHE = {};
   ALLOWED_CACHE_REGEX = cache || [];
 
@@ -181,7 +208,15 @@ const init = (app, { cache } = {}) => {
       next();
     })
   });
+
+  if (global.fetch) {
+    throw new Error('fetch already present here!');
+  }
+  global.fetch = buildFetch({ restrictAttrs });
 };
 
 
-module.exports = { init, fetch };
+module.exports = {
+  init,
+  remove: () => delete global.fetch,
+};

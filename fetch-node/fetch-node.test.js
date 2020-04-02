@@ -3,7 +3,12 @@ const supertest = require('supertest');
 const nock = require('nock');
 
 
-const { fetch, init, flushCache } = require('./fetch-node');
+const { init, remove } = require('./fetch-node');
+
+
+afterEach(() => {
+  remove();
+});
 
 describe('internal app requests', () => {
   test('GET text request', async () => {
@@ -533,6 +538,60 @@ describe('using middlewares', () => {
   });
 });
 
-// TODO raise if access undefined prop
+describe('raise if access undefined property', () => {
+  test('on req', async () => {
+    const app = express();
+
+    init(app, { restrictAttrs: true });
+
+    app.get('/ok', (req, res) => {
+      const b = req.nonExistant;
+      res.json({ prop: true });
+    })
+
+    app.get('/test', async (req, res) => {
+      try {
+        await fetch('/ok');
+        res.send('message from view');
+      } catch({ message }) {
+        res.send(message);
+      }
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('Object req does not have the property "nonExistant"');
+      });
+  });
+
+  test('on res', async () => {
+    const app = express();
+
+    init(app, { restrictAttrs: true });
+
+    app.get('/ok', (req, res) => {
+      const b = res.nonExistant;
+      res.json({ prop: true });
+    })
+
+    app.get('/test', async (req, res) => {
+      try {
+        await fetch('/ok');
+        res.send('message from view');
+      } catch({ message }) {
+        res.send(message);
+      }
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('Object res does not have the property "nonExistant"');
+      });
+  });
+});
 
 // TODO check `headers` to be an object (not a function)
