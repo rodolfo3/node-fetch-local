@@ -477,11 +477,62 @@ describe('cached requests', () => {
 });
 
 
-// cache
+describe('using middlewares', () => {
+  test('GET througth async middleware', async () => {
+    const app = express();
 
-// TODO work with express middlewares (using next() call)
+    init(app);
 
-// TODO check `headers` to be an object (not a function)
+    app.use(
+      '*',
+      (req, res, next) => {
+        Promise.resolve().finally(() => next());
+      },
+    );
+    app.get('/ok', (req, res) => res.send('from-view'));
+
+    app.get('/test', async (req, res) => {
+      const response = await fetch('/ok');
+      const text = await response.text();
+      res.send(text);
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('from-view');
+      });
+  });
+
+  test('GET response from middleware', async () => {
+    const app = express();
+
+    init(app);
+
+    app.use(
+      '*',
+      (req, res, next) => {
+        res.send('middleware!');
+      },
+    );
+    app.get('/ok', (req, res) => res.send('from-view'));
+
+    app.get('/test', async (req, res) => {
+      const response = await fetch('/ok');
+      const text = await response.text();
+      res.send(text);
+    });
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('middleware!');
+      });
+  });
+});
 
 // TODO raise if access undefined prop
 
+// TODO check `headers` to be an object (not a function)
