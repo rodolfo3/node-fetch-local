@@ -10,6 +10,7 @@ afterEach(() => {
   remove();
 });
 
+
 describe('internal app requests', () => {
   test('GET text request', async () => {
     const app = express();
@@ -18,6 +19,41 @@ describe('internal app requests', () => {
 
     app.post('/ok', (req, res) => res.send('ERROR'));
     app.get('/ok', (req, res) => res.send('ok'));
+
+    app.get('/test', async (req, res, next) => {
+      try {
+        const response = await fetch('/ok');
+        const text = await response.text();
+        res.send(text);
+        next();
+      } catch(err) {
+        console.error(err);
+        res.status(500).send(err);
+        next(err);
+      }
+    });
+
+
+    await supertest(app)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('ok');
+      });
+  });
+
+  /*
+  test('GET text request using router', async () => {
+    const app = express();
+    const router = express.Router();
+
+    init(app, { router });
+
+    router.post('/ok', (req, res) => res.send('ERROR'));
+    router.get('/ok', (req, res) => res.send('ok' + req.a));
+
+    router.use('/ok', function errorMe (req, res, next) { throw new Error('1'); req.a = 1; next(); })
+    app.use(router);
 
     app.get('/test', async (req, res) => {
       const response = await fetch('/ok');
@@ -33,7 +69,7 @@ describe('internal app requests', () => {
         expect(response.text).toBe('ok');
       });
   });
-
+  */
 
   test('GET json request', async () => {
     const app = express();
@@ -82,7 +118,6 @@ describe('internal app requests', () => {
       });
   });
 
-
   test('GET query params', async () => {
     const app = express();
 
@@ -105,7 +140,6 @@ describe('internal app requests', () => {
         expect(response.body.limit).toBe("3");
       });
   });
-
 
   test('GET data from URL', async () => {
     const app = express();
@@ -130,7 +164,7 @@ describe('internal app requests', () => {
       });
   });
 
-
+  /*
   test('options parameters on route', async () => {
     const app = express();
 
@@ -158,6 +192,8 @@ describe('internal app requests', () => {
         expect(response.body.set).toBe('42');
       });
   });
+
+  // */
 });
 
 
@@ -182,7 +218,7 @@ describe('external requests', () => {
   });
 });
 
-
+/*
 describe('cookie support', () => {
   test('GET send with cookies', async () => {
     const app = express();
@@ -601,3 +637,4 @@ describe('raise if access undefined property', () => {
 // TODO allow read "headers" from response (headers.get("something"))
 //
 // TODO handler app.use(router);
+// */

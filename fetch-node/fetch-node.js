@@ -1,5 +1,6 @@
 const nodeFetch = require('node-fetch');
 const urlParser = require('url');
+const http = require('http');
 // const { createNamespace } = require('continuation-local-storage');
 const { createNamespace } = require('cls-hooked');
 
@@ -7,23 +8,23 @@ const session = createNamespace('requests');
 
 
 const getRouteLayer = (pathname, router) => {
-  const [layer] = router.stack.filter(
+  const layers = router.stack.filter(
     s => (
-      s.route
-      &&
-      s.route.methods.get
-      &&
       s.regexp.exec(pathname)
       &&
-      s.route.stack.filter(i => i.method === 'get').length
+      (
+        typeof s.route === 'undefined'
+        ||
+        s.route.stack.filter(i => i.method === 'get').length
+      )
     ),
   );
 
-  if (!layer) {
-    throw new Error(`GET not allowed for ${pathname}`);
+  if (layers.length != 1) {
+    throw new Error(`GET not allowed for ${pathname}: ${layers.length}`);
   }
 
-  return layer;
+  return layers[0];
 };
 
 const getHandler = (pathname, router) => {
@@ -165,10 +166,7 @@ const raiseIfUndefinedPropHandler = (name) => ({
 });
 
 
-const buildFetch = ({ app, restrictAttrs }) => {
-  const wrapReq = restrictAttrs ? (
-    req => new Proxy(req, raiseIfUndefinedPropHandler('req'))
-  ) : req => req;
+const buildFetch = ({ app, router = app._router, restrictAttrs }) => {
 
   const wrapRes = restrictAttrs ? (
     res => new Proxy(res, raiseIfUndefinedPropHandler('res'))
@@ -183,22 +181,37 @@ const buildFetch = ({ app, restrictAttrs }) => {
       try {
         const parentReq = session.get('req');
         const parentRes = session.get('res');
-  
-        const { pathname, query } = urlParser.parse(url, true);
-        const handler = getHandler(pathname, app._router);
-  
-        const res = wrapRes(
-          buildResponse(resolve, reject, parentReq, parentRes),
-        );
-        const req = wrapReq({
-          _parentReq: parentReq,
-          params: extractParamsFromUrl(pathname, app._router),
-          cookies: parentReq.cookies,
-          query,
-          // TODO
+
+        const req = Object.create(app.request, {
+          _parentReq: { value: parentReq },
+          url: { value: url },
+          method: { value: 'GET' },
+          headers: {
+            value: {
+              'cookies': parentReq.headers.cookies
+            },
+          },
         });
-  
-        handler(req, res);
+
+        const res = new http.ServerResponse(req);
+
+        const cb = (...args) => {
+          const [headers, body, callback] = res.outputData;
+          resolve({
+            status: res.status,
+            statusCode: res.statusCode,
+            ok: res.statusCode < 400, // why there is no res.ok?
+            text: async () => body.data.toString(body.encoding),
+            json: async () => JSON.parse(body.data.toString(body.encoding)),
+          });
+        };
+
+        req.res = res;
+        res.req = req;
+        app.handle(req, res, cb);
+
+        // This will work on express 5 (that calls the `next()` automatically
+        req.next(); // is this required?
       } catch(e) {
         reject(e);
       }
@@ -209,7 +222,7 @@ const buildFetch = ({ app, restrictAttrs }) => {
 };
 
 
-const init = (app, { cache, restrictAttrs = false } = {}) => {
+const init = (app, { router, cache, restrictAttrs = false } = {}) => {
   CACHE = {};
   ALLOWED_CACHE_REGEX = cache || [];
 
@@ -225,7 +238,7 @@ const init = (app, { cache, restrictAttrs = false } = {}) => {
     throw new Error('fetch is already present here!');
   }
 
-  global.fetch = buildFetch({ app, restrictAttrs });
+  global.fetch = buildFetch({ app, router, restrictAttrs });
   return app;
 };
 
