@@ -7,6 +7,25 @@ const { createNamespace } = require('cls-hooked');
 const session = createNamespace('requests');
 
 
+const parseRes = (res) => {
+  if (res.output) {
+    const [headers, body] = res.output;
+    return {
+      headers,
+      body: body.toString(),
+    };
+  }
+
+  if (res.outputData) {
+      const [headers, body] = res.outputData;
+      return {
+        headers: headers.data.toString(headers.encoding),
+        body: body.data.toString(body.encoding),
+      };
+  }
+};
+
+
 const getRouteLayer = (pathname, router) => {
   const layers = router.stack.filter(
     s => (
@@ -172,9 +191,13 @@ const buildFetch = ({ app, router = app._router, restrictAttrs }) => {
     res => new Proxy(res, raiseIfUndefinedPropHandler('res'))
   ) : res => res;
 
-  const fetch = async (url, ...params) => {
+  const fetch = async (url, init) => {
     if (url.startsWith('http')) {
-      return fetchAndCache(url, ...params);
+      return fetchAndCache(url, init);
+    }
+
+    if (init && init.headers && typeof init.headers !== 'object') {
+      throw new Error(`Headers should be an object (it is ${typeof init.headers})`);
     }
 
     return new Promise((resolve, reject) => {
@@ -184,8 +207,9 @@ const buildFetch = ({ app, router = app._router, restrictAttrs }) => {
 
         const req = Object.create(app.request, {
           _parentReq: { value: parentReq },
-          url: { value: url },
+          url: { value: url, writable: true },
           method: { value: 'GET' },
+          cookies: { value: parentReq.cookies },
           headers: {
             value: {
               'cookies': parentReq.headers.cookies
@@ -196,13 +220,27 @@ const buildFetch = ({ app, router = app._router, restrictAttrs }) => {
         const res = new http.ServerResponse(req);
 
         const cb = (...args) => {
-          const [headers, body, callback] = res.outputData;
+          const output = res.outputData || res.output;
+          const { headers, body } = parseRes(res);
+
+          setCookies = headers.split('\r\n').filter(i => i.startsWith('Set-Cookie:'));
+          setCookies.forEach(
+            header => {
+              const [k, v] = header.split(': ');
+              parentRes.append(k, v);
+              // make available to subsequent requests
+              // TODO use cookie-parser?
+              const [name, value] = v.split(';')[0].split('=');
+              parentReq.cookies[name] = value;
+            }
+          );
+
           resolve({
             status: res.status,
             statusCode: res.statusCode,
             ok: res.statusCode < 400, // why there is no res.ok?
-            text: async () => body.data.toString(body.encoding),
-            json: async () => JSON.parse(body.data.toString(body.encoding)),
+            text: async () => body,
+            json: async () => JSON.parse(body),
           });
         };
 

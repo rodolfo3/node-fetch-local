@@ -42,7 +42,6 @@ describe('internal app requests', () => {
       });
   });
 
-  /*
   test('GET text request using router', async () => {
     const app = express();
     const router = express.Router();
@@ -50,9 +49,8 @@ describe('internal app requests', () => {
     init(app, { router });
 
     router.post('/ok', (req, res) => res.send('ERROR'));
-    router.get('/ok', (req, res) => res.send('ok' + req.a));
+    router.get('/ok', (req, res) => res.send('ok'));
 
-    router.use('/ok', function errorMe (req, res, next) { throw new Error('1'); req.a = 1; next(); })
     app.use(router);
 
     app.get('/test', async (req, res) => {
@@ -69,7 +67,6 @@ describe('internal app requests', () => {
         expect(response.text).toBe('ok');
       });
   });
-  */
 
   test('GET json request', async () => {
     const app = express();
@@ -164,7 +161,6 @@ describe('internal app requests', () => {
       });
   });
 
-  /*
   test('options parameters on route', async () => {
     const app = express();
 
@@ -192,8 +188,6 @@ describe('internal app requests', () => {
         expect(response.body.set).toBe('42');
       });
   });
-
-  // */
 });
 
 
@@ -218,7 +212,6 @@ describe('external requests', () => {
   });
 });
 
-/*
 describe('cookie support', () => {
   test('GET send with cookies', async () => {
     const app = express();
@@ -273,7 +266,6 @@ describe('cookie support', () => {
       .expect('set-cookie', 'i=42; Domain=local.com; Path=/');
   });
 
-
   test('multiple GET pass throuth cookies (promises)', async () => {
     const app = express();
 
@@ -284,12 +276,12 @@ describe('cookie support', () => {
     app.use(cookieParser());
 
     app.get('/step1', (req, res) => {
-      res.cookie('j', '21', { domain: 'local.com', path: '/' });
+      res.cookie('i', '21', { domain: 'local.com', path: '/' });
       res.send('ok');
     });
 
     app.get('/step2', (req, res) => {
-      res.cookie('j', parseInt(req.cookies.j) * 2, { domain: 'local.com', path: '/' });
+      res.cookie('j', parseInt(req.cookies.i) * 2, { domain: 'local.com', path: '/' });
       res.send('ok');
     });
 
@@ -302,7 +294,7 @@ describe('cookie support', () => {
     });
 
     const bothCookies = [
-      'j=21; Domain=local.com; Path=/',
+      'i=21; Domain=local.com; Path=/',
       'j=42; Domain=local.com; Path=/'
     ].join(',');
 
@@ -311,7 +303,6 @@ describe('cookie support', () => {
       .expect(200)
       .expect('set-cookie', bothCookies);
   });
-
 
   test('multiple GET pass throuth cookies (async/await)', async () => {
     const app = express();
@@ -328,7 +319,7 @@ describe('cookie support', () => {
     });
 
     app.get('/step2', (req, res) => {
-      res.cookie('i', parseInt(req.cookies.i) * 2, { domain: 'local.com', path: '/' });
+      res.cookie('j', parseInt(req.cookies.i) * 2, { domain: 'local.com', path: '/' });
       res.send('ok');
     });
 
@@ -341,7 +332,7 @@ describe('cookie support', () => {
 
     const bothCookies = [
       'i=21; Domain=local.com; Path=/',
-      'i=42; Domain=local.com; Path=/'
+      'j=42; Domain=local.com; Path=/'
     ].join(',');
 
     await supertest(app)
@@ -350,7 +341,6 @@ describe('cookie support', () => {
       .expect('set-cookie', bothCookies);
   });
 });
-
 
 describe('cached requests', () => {
   beforeEach(() => {
@@ -517,7 +507,6 @@ describe('cached requests', () => {
 
 });
 
-
 describe('using middlewares', () => {
   test('GET througth async middleware', async () => {
     const app = express();
@@ -574,67 +563,36 @@ describe('using middlewares', () => {
   });
 });
 
-describe('raise if access undefined property', () => {
-  test('on req', async () => {
+
+describe('headers as a funcion', () => {
+  test('raises an exception', async () => {
     const app = express();
 
-    init(app, { restrictAttrs: true });
+    init(app);
 
-    app.get('/ok', (req, res) => {
-      const b = req.nonExistant;
-      res.json({ prop: true });
-    })
+    app.get('/me', (req, res) => res.send('ok'));
 
     app.get('/test', async (req, res) => {
       try {
-        await fetch('/ok');
-        res.send('message from view');
-      } catch({ message }) {
-        res.send(message);
+        const response = await fetch('/me', {headers: () => {}});
+        res.send('request done');
+      } catch(err) {
+        res.status(500).send(`request failed: ${err.message}`);
       }
     });
 
     await supertest(app)
       .get('/test')
-      .expect(200)
+      .expect(500)
       .then(response => {
-        expect(response.text).toBe('Object req does not have the property "nonExistant"');
-      });
-  });
-
-  test('on res', async () => {
-    const app = express();
-
-    init(app, { restrictAttrs: true });
-
-    app.get('/ok', (req, res) => {
-      const b = res.nonExistant;
-      res.json({ prop: true });
-    })
-
-    app.get('/test', async (req, res) => {
-      try {
-        await fetch('/ok');
-        res.send('message from view');
-      } catch({ message }) {
-        res.send(message);
-      }
-    });
-
-    await supertest(app)
-      .get('/test')
-      .expect(200)
-      .then(response => {
-        expect(response.text).toBe('Object res does not have the property "nonExistant"');
+        expect(response.text).toBe('request failed: Headers should be an object (it is function)');
       });
   });
 });
 
-// TODO check `headers` to be an object (not a function)
+
+// TODO allow read "headers" from response (headers.get("something"))
 
 // TODO allow res.status(500).end('Internal server error')
 
-// TODO allow read "headers" from response (headers.get("something"))
-//
-// TODO handler app.use(router);
 // */
