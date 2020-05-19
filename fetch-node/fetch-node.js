@@ -260,6 +260,12 @@ const buildFetch = ({ app, router = app._router, restrictAttrs }) => {
 };
 
 
+const perAppFetch = (...args) => {
+  const { app } = session.get('req');
+  return app.fetch(...args);
+};
+
+
 const init = (app, { router, cache, restrictAttrs = false } = {}) => {
   CACHE = {};
   ALLOWED_CACHE_REGEX = cache || [];
@@ -272,11 +278,9 @@ const init = (app, { router, cache, restrictAttrs = false } = {}) => {
     })
   });
 
-  if (global.fetch) {
-    throw new Error('fetch is already present here!');
-  }
+  app.fetch = buildFetch({ app, router, restrictAttrs });
+  global.fetch = perAppFetch;
 
-  global.fetch = buildFetch({ app, router, restrictAttrs });
   return app;
 };
 

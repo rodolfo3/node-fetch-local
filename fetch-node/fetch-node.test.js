@@ -1,6 +1,7 @@
 const express = require('express');
 const supertest = require('supertest');
 const nock = require('nock');
+const vhost = require('vhost');
 
 
 const { init, remove } = require('./fetch-node');
@@ -590,6 +591,69 @@ describe('headers as a funcion', () => {
   });
 });
 
+
+describe('multiple apps', () => {
+  let app1, app2;
+
+  beforeEach(() => {
+    app1 = express();
+    init(app1);
+    app1.get('/endpoint', (req, res) => res.send('1'));
+
+    app2 = express();
+    init(app2);
+    app2.get('/endpoint', (req, res) => res.send('2'));
+
+    const endpointCore = async (req, res) => {
+      const response = await fetch('/endpoint');
+      const text = await response.text();
+      res.send(text);
+    };
+
+    app1.get('/test', endpointCore);
+    app2.get('/test', endpointCore);
+
+  });
+
+  test('multiple apps call right function', async () => {
+    await supertest(app2)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('2');
+      });
+
+    await supertest(app1)
+      .get('/test')
+      .expect(200)
+      .then(response => {
+        expect(response.text).toBe('1');
+      });
+  });
+
+  test('vhost calls the right function', async () => {
+    const app = express();
+    app.use(vhost('app1.local.dev', app1));
+    app.use(vhost('app2.local.dev', app2));
+
+    await supertest(app)
+      .get('/test')
+      .set({ Host: 'app1.local.dev' })
+      .expect(200)
+      .then(response => {
+	expect(response.text).toBe('1');
+      })
+
+    await supertest(app)
+      .get('/test')
+      .set({ Host: 'app2.local.dev' })
+      .expect(200)
+      .then(response => {
+	expect(response.text).toBe('2');
+      })
+
+  });
+});
 
 // TODO allow read "headers" from response (headers.get("something"))
 
