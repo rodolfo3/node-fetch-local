@@ -1,0 +1,27 @@
+{
+  "name": "node-fetch-local",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "author": "",
+  "license": "ISC",
+  "peerDependencies": {
+    "cookie-parser": "^1.4.4",
+    "express": "^4.17.1"
+  },
+  "dependencies": {
+    "cls-hooked": "^4.2.2",
+    "cookie-parser": "^1.4.5",
+    "node-fetch": "^2.6.0",
+    "vhost": "^3.0.2"
+  },
+  "devDependencies": {
+    "jest": "^24.9.0",
+    "nock": "^11.4.0",
+    "supertest": "^4.0.2"
+  }
+}
